@@ -186,6 +186,39 @@ Mirror mode (`--delete`) will remove files and directories from the destination 
 
 ---
 
+## Using as a Library
+
+While SyncEveryThing is designed as a standalone command-line tool, its core synchronization logic can be integrated into your own C++ projects.
+
+The tool is provided as a single source file (`SyncEveryThing.cpp`) and does not have a separate header file. To use its functions:
+
+1.  Copy the `SyncEveryThing.cpp` file into your project's source directory.
+2.  Remove or comment out the `main()` function to avoid a linking conflict.
+3.  You can then call the core functions, such as `syncDir()` and `syncFile()`, directly from your code by providing the necessary parameters.
+4.  Ensure your project is compiled with C++17 support and links the necessary libraries (e.g., `bcrypt.lib` on Windows if using SHA-256 functionality).
+
+**Example Usage:**
+
+```cpp
+// In your own project's code:
+// Note: You would need to include the necessary headers like <filesystem>, <vector>, etc.
+
+// Forward declare the function you want to use from SyncEveryThing.cpp
+void syncDir(const std::filesystem::path& src, const std::filesystem::path& dst, const std::vector<std::filesystem::path>& ignorePaths,
+             bool dryRun, bool verbose, bool mirror, bool enableColors);
+
+void myCustomBackupFunction() {
+    fs::path source = "C:\\my-data";
+    fs::path destination = "D:\\my-backup";
+    std::vector<fs::path> ignore_list;
+    ignore_list.push_back(source / ".cache");
+
+    // Call the core logic directly
+    syncDir(source, destination, ignore_list, false, true, true, true);
+}
+```
+---
+
 ## Contributing
 
 * Fork the repo, open PRs for fixes and features.
