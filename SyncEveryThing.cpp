@@ -1,5 +1,5 @@
-// Compile: (Windows) cl /std:c++17 test.cpp /link bcrypt.lib
-//          (GCC)     g++ -std=c++17 test.cpp -lbcrypt -o SHA256.exe
+// Compile: (Windows) cl /std:c++17 SyncEveryThing.cpp /link bcrypt.lib
+//          (GCC)     g++ -std=c++17 SyncEveryThing.cpp -lbcrypt -o SyncEveryThing.exe
 
 #include <iostream>
 #include <fstream>
@@ -728,3 +728,4 @@ int main(int argc, char* argv[]) {
     }
     return 0;
 }
+
