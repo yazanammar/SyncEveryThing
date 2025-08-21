@@ -21,10 +21,10 @@ A lightweight, reliable C++17 command-line tool to synchronize files and directo
 
 ```
 / (repo root)
-  ├─ sync.cpp          # single-source-file implementation
-  ├─ README.md         # this file
-  ├─ LICENSE           # recommended: MIT
-  └─ .github/workflows # optional CI GitHub Actions
+  ├─ SyncEveryThing.cpp   # single-source-file implementation
+  ├─ README.md            # this file
+  ├─ LICENSE              # recommended: MIT
+  └─ .github/workflows    # optional CI GitHub Actions
 ```
 
 ---
@@ -64,7 +64,7 @@ g++ -std=c++17 SyncEveryThing.cpp -o sync-everything
 
 **Important compile-time fix**
 
-* The source needs `#include <cstdint>` to ensure fixed-width integer types (`uint8_t`, `uint64_t`) are defined on all compilers. Make sure this line is present at the top of `sync.cpp`.
+* The source needs `#include <cstdint>` to ensure fixed-width integer types (`uint8_t`, `uint64_t`) are defined on all compilers. Make sure this line is present at the top of `SyncEveryThing.cpp`.
 
 ---
 
