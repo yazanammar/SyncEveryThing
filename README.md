@@ -192,12 +192,6 @@ Mirror mode (`--delete`) will remove files and directories from the destination 
 
 ---
 
-## License
-
-Recommended: **MIT**. Include a `LICENSE` file at the project root.
-
----
-
 ## Support / Contact
 
 If you need a patch file, CI setup (GitHub Actions), or a release-ready README with badges, I can prepare those next.
