@@ -46,19 +46,19 @@ A lightweight, reliable C++17 command-line tool to synchronize files and directo
 Windows (MSVC, recommended if you want `--sha256`):
 
 ```powershell
-cl /std:c++17 sync.cpp /link bcrypt.lib /Fe:Sync-EveryThing.exe
+cl /std:c++17 SyncEveryThing.cpp /link bcrypt.lib /Fe:SyncEveryThing.exe
 ```
 
 Windows (MinGW/GCC — if libbcrypt is available):
 
 ```bash
-g++ -std=c++17 sync.cpp -o Sync-EveryThing.exe -lbcrypt
+g++ -std=c++17 SyncEveryThing.cpp -o SyncEveryThing.exe -lbcrypt
 ```
 
 Linux / macOS (POSIX builds):
 
 ```bash
-g++ -std=c++17 sync.cpp -o sync-everything
+g++ -std=c++17 SyncEveryThing.cpp -o sync-everything
 # Do not use --sha256 on POSIX builds unless you add a cross-platform SHA-256 implementation.
 ```
 
@@ -99,19 +99,19 @@ Options:
 Dry-run sync a vault (Unix example):
 
 ```bash
-./sync-everything --dir "/home/alex/Vault" "/mnt/backup/Vault" --ignore "/home/alex/Vault/.git" --dry-run --verbose --color
+./SyncEveryThing.exe --dir "/home/alex/Vault" "/mnt/backup/Vault" --ignore "/home/alex/Vault/.git" --dry-run --verbose --color
 ```
 
 Mirror mode (Windows example — be careful):
 
 ```powershell
-Sync-EveryThing.exe --dir "C:\Users\me\Vault" "D:\Backup\Vault" --delete --save-log --verbose --color
+SyncEveryThing.exe --dir "C:\Users\me\Vault" "D:\Backup\Vault" --delete --save-log --verbose --color
 ```
 
 Single file sync:
 
 ```bash
-./sync-everything --file "/home/alex/.config/nvim/init.vim" "/mnt/config-backup" --dry-run
+./SyncEveryThing.exe --file "/home/alex/.config/nvim/init.vim" "/mnt/config-backup" --dry-run
 ```
 
 Run with saved settings (no args):
