@@ -1,5 +1,7 @@
 # SyncEveryThing
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A lightweight, reliable C++17 command-line tool to synchronize files and directories. Designed for vault-style backups and fast content-aware syncs with dry-run, mirror, and ignore-list support.
 
 ---
