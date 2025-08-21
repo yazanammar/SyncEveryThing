@@ -227,6 +227,6 @@ void myCustomBackupFunction() {
 
 ---
 
-## Support / Contact
+## Support & Contributions
 
-If you need a patch file, CI setup (GitHub Actions), or a release-ready README with badges, I can prepare those next.
+If you encounter any issues or have a feature request, please don't hesitate to [open an issue](https://github.com/yazanammar/SyncEveryThing/issues) on our GitHub repository. We welcome all feedback and contributions!
