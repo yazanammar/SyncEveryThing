@@ -13,8 +13,7 @@ A lightweight, reliable C++17 command-line tool to synchronize files and directo
 * Mirror mode (`--delete`) — removes destination items not present in source.
 * Source-based ignore paths (`--ignore`, repeatable).
 * Fast dedupe/move heuristics when identical content exists in destination.
-* Default fingerprinting: FNV64 (fast). Optional Windows SHA-256 using CNG (`--sha256`).
-* Optional colored output, logging to `sync.log`, and saving runtime settings to `settings.json`.
+* Default fingerprinting: FNV64 (fast). Optional Windows SHA-256 using CNG (`--sha256`), with new granular controls to apply it only to files within a specific size range (`--sha256-min`, `--sha256-max`).* Optional colored output, logging to `sync.log`, and saving runtime settings to `settings.json`.
 * Windows helper to add the tool folder to the current user's PATH (`--add-to-path`).
 
 ---
@@ -23,7 +22,7 @@ A lightweight, reliable C++17 command-line tool to synchronize files and directo
 
 ```
 / (repo root)
-  ├─ SyncEveryThing.cpp   # single-source-file implementation
+  ├─ sync.cpp             # single-source-file implementation
   ├─ README.md            # this file
   ├─ LICENSE              # recommended: MIT
   └─ .github/workflows    # optional CI GitHub Actions
@@ -48,19 +47,19 @@ A lightweight, reliable C++17 command-line tool to synchronize files and directo
 Windows (MSVC, recommended if you want `--sha256`):
 
 ```powershell
-cl /std:c++17 SyncEveryThing.cpp /link bcrypt.lib /Fe:Sync-EveryThing.exe
+cl /std:c++17 sync.cpp /link bcrypt.lib /Fe:sync.exe
 ```
 
 Windows (MinGW/GCC — if libbcrypt is available):
 
 ```bash
-g++ -std=c++17 SyncEveryThing.cpp -o sync-everything -lbcrypt
+g++ -std=c++17 sync.cpp -o sync -lbcrypt
 ```
 
 Linux / macOS (POSIX builds):
 
 ```bash
-g++ -std=c++17 SyncEveryThing.cpp -o sync-everything
+g++ -std=c++17 sync.cpp -o sync-everything
 # Do not use --sha256 on POSIX builds unless you add a cross-platform SHA-256 implementation.
 ```
 
@@ -73,8 +72,8 @@ g++ -std=c++17 SyncEveryThing.cpp -o sync-everything
 ## Usage
 
 ```
-Sync-EveryThing --dir <source_directory> <dest_directory> [options]
-Sync-EveryThing --file <source_file> <dest_directory> [options]
+.\sync.exe --dir <source_directory> <dest_directory> [options]
+.\sync.exe --file <source_file> <dest_directory> [options]
 ```
 
 Options:
@@ -90,8 +89,11 @@ Options:
 --save-log          Save operations to sync.log
 --save-settings     Save arguments to settings.json
 --sha256            Use SHA-256 (Windows CNG) for fingerprints (Windows only)
+--sha256-min <N>    Minimum file size to use SHA-256 (e.g. 1M, 500K)
+--sha256-max <N>    Maximum file size to use SHA-256 (e.g. 500M, 2G)
 --add-to-path       [Windows] add tool to user PATH
 -h, --help          Show help
+
 ```
 
 ---
@@ -101,19 +103,19 @@ Options:
 Dry-run sync a vault (Unix example):
 
 ```bash
-./sync-everything --dir "/home/alex/Vault" "/mnt/backup/Vault" --ignore "/home/alex/Vault/.git" --dry-run --verbose --color
+./sync --dir "/home/alex/Vault" "/mnt/backup/Vault" --ignore "/home/alex/Vault/.git" --dry-run --verbose --color
 ```
 
 Mirror mode (Windows example — be careful):
 
 ```powershell
-Sync-EveryThing.exe --dir "C:\Users\me\Vault" "D:\Backup\Vault" --delete --save-log --verbose --color
+sync.exe --dir "C:\Users\me\Vault" "D:\Backup\Vault" --delete --save-log --verbose --color
 ```
 
 Single file sync:
 
 ```bash
-./sync-everything --file "/home/alex/.config/nvim/init.vim" "/mnt/config-backup" --dry-run
+./sync --file "/home/alex/.config/nvim/init.vim" "/mnt/config-backup" --dry-run
 ```
 
 Run with saved settings (no args):
@@ -183,6 +185,7 @@ Mirror mode (`--delete`) will remove files and directories from the destination 
 
 * **v1.0** — Initial public release: directory & file sync, FNV64 fingerprints, dry-run, mirror, ignore, colored output, Windows SHA-256 support.
 * **v1.1** — Fix: file size check duplication bug; added `<cstdint>` include; improved registry PATH handling; recommendations for concurrency throttling.
+* * **v1.2** — New: Added `--sha256-min` and `--sha256-max` for size-based conditional SHA-256 fingerprinting. Changed default `--sha256` behavior to apply to all files unless limits are specified.
 
 ---
 
@@ -190,9 +193,9 @@ Mirror mode (`--delete`) will remove files and directories from the destination 
 
 While SyncEveryThing is designed as a standalone command-line tool, its core synchronization logic can be integrated into your own C++ projects.
 
-The tool is provided as a single source file (`SyncEveryThing.cpp`) and does not have a separate header file. To use its functions:
+The tool is provided as a single source file (`sync.cpp`) and does not have a separate header file. To use its functions:
 
-1.  Copy the `SyncEveryThing.cpp` file into your project's source directory.
+1.  Copy the `sync.cpp` file into your project's source directory.
 2.  Remove or comment out the `main()` function to avoid a linking conflict.
 3.  You can then call the core functions, such as `syncDir()` and `syncFile()`, directly from your code by providing the necessary parameters.
 4.  Ensure your project is compiled with C++17 support and links the necessary libraries (e.g., `bcrypt.lib` on Windows if using SHA-256 functionality).
@@ -203,7 +206,7 @@ The tool is provided as a single source file (`SyncEveryThing.cpp`) and does not
 // In your own project's code:
 // Note: You would need to include the necessary headers like <filesystem>, <vector>, etc.
 
-// Forward declare the function you want to use from SyncEveryThing.cpp
+// Forward declare the function you want to use from sync.cpp
 void syncDir(const std::filesystem::path& src, const std::filesystem::path& dst, const std::vector<std::filesystem::path>& ignorePaths,
              bool dryRun, bool verbose, bool mirror, bool enableColors);
 
