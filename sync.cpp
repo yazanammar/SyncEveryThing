@@ -1,5 +1,5 @@
-// Compile: (Windows) cl /std:c++17 SyncEveryThing.cpp /link bcrypt.lib
-//          (GCC)     g++ -std=c++17 SyncEveryThing.cpp -lbcrypt -o SyncEveryThing.exe
+// Compile: (Windows) cl /std:c++17 sync.cpp /link bcrypt.lib
+//          (GCC)     g++ -std=c++17 sync.cpp -lbcrypt -o sync.exe
 
 #include <iostream>
 #include <fstream>
@@ -54,6 +54,19 @@ const std::string BOLD_WHITE = "\033[1;37m";
 
 // ========== SHA-256 / fingerprint support ==========
 static bool g_use_sha256 = false;
+
+// Default policy:
+// - by default (no --sha256-min and no --sha256-max specified) we treat min/max as NOT set,
+//   which means: if --sha256 is provided, SHA applies to ALL files.
+// - if user supplies --sha256-min or --sha256-max, the corresponding bound will be enforced.
+
+// value holders
+static uint64_t g_sha256_min_bytes = 0ULL;                 // default 0 = no lower bound
+static uint64_t g_sha256_max_bytes = UINT64_MAX;          // default UINT64_MAX = no upper bound
+
+// flags to indicate whether the user explicitly provided those bounds
+static bool g_sha256_min_set = false;
+static bool g_sha256_max_set = false;
 
 static std::string bytes_to_hex(const uint8_t* data, size_t len) {
     std::ostringstream oss;
@@ -142,14 +155,36 @@ static std::string compute_file_fnv_hex(const fs::path& path) {
 }
 
 static std::string file_fingerprint_hex(const fs::path& p) {
-    if (g_use_sha256) {
-#ifdef _WIN32
-        std::string hex = compute_file_sha256_hex(p);
-        if (!hex.empty()) return hex;
-#endif
+    std::error_code ec;
+    uintmax_t fsize = 0;
+    try {
+        fsize = fs::file_size(p, ec);
+    } catch (...) {
+        ec = std::make_error_code(std::errc::io_error);
     }
+
+    if (!ec && g_use_sha256) {
+        uint64_t sz = static_cast<uint64_t>(fsize);
+
+        // Enforce bounds only if they were explicitly set by the user.
+        // If neither bound is set (both flags false) -> allow SHA for all files.
+        if ( (g_sha256_min_set && sz < g_sha256_min_bytes) ) {
+            // smaller than requested minimum -> skip SHA -> use FNV
+        } else if ( (g_sha256_max_set && sz > g_sha256_max_bytes) ) {
+            // larger than requested maximum -> skip SHA -> use FNV
+        } else {
+            // either no bounds set, or sz is within the explicitly-set bounds -> try SHA
+#ifdef _WIN32
+            std::string hex = compute_file_sha256_hex(p);
+            if (!hex.empty()) return hex;
+#endif
+            // if SHA failed for any reason, fall through to FNV
+        }
+    }
+    // fallback (or sha disabled / out-of-range)
     return compute_file_fnv_hex(p);
 }
+
 
 // ========== Logging ==========
 std::mutex logMutex;
@@ -217,6 +252,23 @@ std::map<std::string, std::string> loadSettings() {
         settings[key] = val;
     }
     return settings;
+}
+
+static uint64_t parse_size_arg(const std::string& s, uint64_t default_val = 0) {
+    if (s.empty()) return default_val;
+    try {
+        size_t idx = 0;
+        uint64_t v = std::stoull(s, &idx);
+        if (idx < s.size()) {
+            char suf = (char)std::toupper(s[idx]);
+            if (suf == 'K') v *= 1024ULL;
+            else if (suf == 'M') v *= 1024ULL * 1024ULL;
+            else if (suf == 'G') v *= 1024ULL * 1024ULL * 1024ULL;
+        }
+        return v;
+    } catch (...) {
+        return default_val;
+    }
 }
 
 // ========== Copy helper ==========
@@ -653,6 +705,8 @@ void printHelp(const std::string& exeName) {
               << "  --save-log          Save operations to sync.log\n"
               << "  --save-settings     Save arguments to settings.json\n"
               << "  --sha256            Use SHA-256 (Windows CNG) for fingerprints\n"
+              << "  --sha256-min <N>    Minimum file size to use SHA (e.g. 1M, 500K)\n"
+              << "  --sha256-max <N>    Maximum file size to use SHA (e.g. 500M, 2G)\n"
 #ifdef _WIN32
               << "  --add-to-path       [Windows] add tool to user PATH\n"
 #endif
@@ -664,7 +718,7 @@ int main(int argc, char* argv[]) {
 #ifdef _WIN32
     enableVirtualTerminalProcessing();
 #endif
-    std::cout << PURPLE << "\n--- RUNNING NEW VERSION 16(fixed)\n" << RESET << std::endl;
+    std::cout << PURPLE << "\n--- RUNNING VERSION 1.2 ---\n" << RESET << std::endl;
 
     if (argc < 2) {
         auto loadedSettings = loadSettings();
@@ -689,6 +743,14 @@ int main(int argc, char* argv[]) {
         else if (arg=="--save-log") saveLog=true;
         else if (arg=="--color") enableColors=true;
         else if (arg=="--sha256") useSha256=true;
+        else if (arg=="--sha256-min" && i+1<argc) {
+            g_sha256_min_bytes = parse_size_arg(argv[++i], g_sha256_min_bytes);
+            g_sha256_min_set = true;
+        }
+        else if (arg=="--sha256-max" && i+1<argc) {
+            g_sha256_max_bytes = parse_size_arg(argv[++i], g_sha256_max_bytes);
+            g_sha256_max_set = true;
+        }
         else if (arg=="-h" || arg=="--help") { printHelp(fs::path(argv[0]).filename().string()); return 0; }
 #ifdef _WIN32
         else if (arg=="--add-to-path") { addToPath(fs::absolute(fs::path(argv[0])), true, enableColors); return 0; }
@@ -704,6 +766,14 @@ int main(int argc, char* argv[]) {
             if (!mirror) mirror = (loaded["mirror"]=="true");
             if (!verbose) verbose = (loaded["verbose"]=="true");
             if (!useSha256) useSha256 = (loaded["sha256"]=="true");
+            if (loaded.count("sha256_min")) {
+                g_sha256_min_bytes = parse_size_arg(loaded["sha256_min"], g_sha256_min_bytes);
+                g_sha256_min_set = true;
+            }
+            if (loaded.count("sha256_max")) {
+                g_sha256_max_bytes = parse_size_arg(loaded["sha256_max"], g_sha256_max_bytes);
+                g_sha256_max_set = true;
+            }
         }
     }
 
@@ -723,9 +793,10 @@ int main(int argc, char* argv[]) {
     if (saveSettingsFlag && !mode.empty()) {
         settings["mode"]=mode; settings["src"]=src.string(); settings["dst"]=dst.string();
         settings["mirror"]=mirror?"true":"false"; settings["verbose"]=verbose?"true":"false"; settings["sha256"]=g_use_sha256?"true":"false";
+        if (g_sha256_min_set) settings["sha256_min"]=std::to_string(g_sha256_min_bytes);
+        if (g_sha256_max_set) settings["sha256_max"]=std::to_string(g_sha256_max_bytes);    
         saveSettings(settings);
         logMsg("[*] Settings saved to " + SETTINGS_FILE, true, enableColors);
     }
     return 0;
 }
-
