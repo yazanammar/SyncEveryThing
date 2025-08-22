@@ -13,7 +13,9 @@ A lightweight, reliable C++17 command-line tool to synchronize files and directo
 * Mirror mode (`--delete`) — removes destination items not present in source.
 * Source-based ignore paths (`--ignore`, repeatable).
 * Fast dedupe/move heuristics when identical content exists in destination.
-* Default fingerprinting: FNV64 (fast). Optional Windows SHA-256 using CNG (`--sha256`), with new granular controls to apply it only to files within a specific size range (`--sha256-min`, `--sha256-max`).* Optional colored output, logging to `sync.log`, and saving runtime settings to `settings.json`.
+* Default fingerprinting: FNV64 (fast). Optional Windows SHA-256 using CNG (`--sha256`), with new granular controls to apply it only to files within a specific size range (`--sha256-min`, `--sha256-max`).
+* **Performance control modes** (`--ultra-speed`, `--minimum-speed`) to manage CPU/IO priority and copy concurrency.
+* Optional colored output, logging to `sync.log`, and saving runtime settings to `settings.json`.
 * Windows helper to add the tool folder to the current user's PATH (`--add-to-path`).
 
 ---
@@ -53,13 +55,13 @@ cl /std:c++17 sync.cpp /link bcrypt.lib /Fe:sync.exe
 Windows (MinGW/GCC — if libbcrypt is available):
 
 ```bash
-g++ -std=c++17 sync.cpp -o sync -lbcrypt
+g++ -std=c++17 sync.cpp -o sync.exe -lbcrypt
 ```
 
 Linux / macOS (POSIX builds):
 
 ```bash
-g++ -std=c++17 sync.cpp -o sync-everything
+g++ -std=c++17 sync.cpp -o sync
 # Do not use --sha256 on POSIX builds unless you add a cross-platform SHA-256 implementation.
 ```
 
@@ -91,6 +93,8 @@ Options:
 --sha256            Use SHA-256 (Windows CNG) for fingerprints (Windows only)
 --sha256-min <N>    Minimum file size to use SHA-256 (e.g. 1M, 500K)
 --sha256-max <N>    Maximum file size to use SHA-256 (e.g. 500M, 2G)
+--ultra-speed       Boost priority and concurrency for faster syncs
+--minimum-speed     Lower priority and concurrency to save resources
 --add-to-path       [Windows] add tool to user PATH
 -h, --help          Show help
 
@@ -121,6 +125,13 @@ Single file sync:
 Run with saved settings (no args):
 
 * If `settings.json` is present and `--save-settings` was used previously, the program loads settings and runs the last-saved operation.
+  
+* Running a Sync with Low Priority:
+
+```powershell
+sync.exe --dir "C:\large-folder" "D:\backup" --minimum-speed --verbose
+```
+Ideal for running large backups in the background without slowing down your computer.
 
 ---
 
@@ -157,6 +168,8 @@ During review of the source code, the following fixes and clarifications were ap
    * Consider using a `std::deque<std::future<void>>` and moving futures to avoid accidental copies and make lifecycle management clearer.
    * Add signal handling (SIGINT) to cancel and join outstanding futures gracefully.
 
+ 6. **Concurrency Throttling Implemented (v1.3)** * The tool now uses a semaphore to control the maximum number of simultaneous file copy operations. This prevents I/O saturation, improves stability on systems with slower disks, and fulfills the earlier recommendation to limit concurrent tasks. The concurrency level is adjusted automatically based on the selected performance mode (`--ultra-speed`, `--minimum-speed`, or default).
+
 ---
 
 ## Fingerprinting: FNV64 vs SHA-256 (summary)
@@ -171,7 +184,7 @@ During review of the source code, the following fixes and clarifications were ap
   * Uses Windows CNG (BCrypt) when built on Windows. Stronger, safer, but slower and causes more disk IO.
   * Only available on Windows in the current implementation.
 
-**Recommendation:** Keep default FNV64 for routine runs. Use `--sha256` when you need the highest integrity guarantee and you are on Windows.
+Recommendation: Keep default FNV64 for routine runs. Use --sha256 when you need the highest integrity guarantee. If performance is a concern with large files, combine it with --sha256-max to exclude them from the slower hash calculation.
 
 ---
 
@@ -186,6 +199,7 @@ Mirror mode (`--delete`) will remove files and directories from the destination 
 * **v1.0** — Initial public release: directory & file sync, FNV64 fingerprints, dry-run, mirror, ignore, colored output, Windows SHA-256 support.
 * **v1.1** — Fix: file size check duplication bug; added `<cstdint>` include; improved registry PATH handling; recommendations for concurrency throttling.
 * * **v1.2** — New: Added `--sha256-min` and `--sha256-max` for size-based conditional SHA-256 fingerprinting. Changed default `--sha256` behavior to apply to all files unless limits are specified.
+* **v1.3** — New: Added performance control modes (`--ultra-speed`, `--minimum-speed`) to manage process priority and concurrency. Implemented a semaphore for copy task throttling.
 
 ---
 
