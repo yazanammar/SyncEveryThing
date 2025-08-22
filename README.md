@@ -135,6 +135,28 @@ Ideal for running large backups in the background without slowing down your comp
 
 ---
 
+## 🗓️ Automating with Task Scheduler (Windows)
+
+You can use the built-in Windows Task Scheduler to run `sync.exe` automatically on a schedule. Here are a couple of common examples using the `schtasks` command in PowerShell or Command Prompt.
+
+> **Important**: Remember to replace the paths in the examples below with the actual paths to your `sync.exe` executable and your source/destination directories.
+
+**To run the sync every hour:**
+
+```PowerShell
+schtasks /Create /TN "My Hourly Sync" /TR "\"C:\path\to\sync.exe\" \"D:\source-folder\" \"E:\backup-folder\" --verbose" /SC HOURLY /RL HIGHEST
+```
+
+**To run the sync every time you log on:**
+
+```PowerShell
+schtasks /Create /TN "My Logon Sync" /TR "\"C:\path\to\sync.exe\" \"D:\source-folder\" \"E:\backup-folder\"" /SC ONLOGON /RL HIGHEST
+```
+
+> If you use paths with spaces, pay close attention to the nested double quotes `\"...\"` in the examples.
+
+---
+
 ## Implementation notes & important fixes applied
 
 During review of the source code, the following fixes and clarifications were applied or must be present before publishing:
