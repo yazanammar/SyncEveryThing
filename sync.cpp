@@ -27,6 +27,47 @@
 
 namespace fs = std::filesystem;
 
+// new includes for concurrency & priority control
+#include <thread>
+#include <condition_variable>
+#include <atomic>
+#include <cerrno>
+
+// ========== Ultra/Minimum speed globals ==========
+static bool g_ultra_speed = false;
+static bool g_minimum_speed = false;
+
+// concurrency control for copy tasks
+static int g_max_concurrent_copies = 0; // will be set at runtime based on policy
+
+// small helper semaphore (simple counting semaphore)
+class SimpleSemaphore {
+    std::mutex m;
+    std::condition_variable cv;
+    int count;
+public:
+    SimpleSemaphore(int initial = 0) : count(initial) {}
+    void acquire() {
+        std::unique_lock<std::mutex> lk(m);
+        cv.wait(lk, [&]{ return count > 0; });
+        --count;
+    }
+    void release() {
+        {
+            std::lock_guard<std::mutex> lk(m);
+            ++count;
+        }
+        cv.notify_one();
+    }
+    void set_count(int v) {
+        std::lock_guard<std::mutex> lk(m);
+        count = v > 0 ? v : 0;
+        cv.notify_all();
+    }
+};
+
+static std::shared_ptr<SimpleSemaphore> g_copy_sem;
+
 // ========== ANSI Color Codes ==========
 
 // --- Normal colors ---
@@ -272,6 +313,7 @@ static uint64_t parse_size_arg(const std::string& s, uint64_t default_val = 0) {
 }
 
 // ========== Copy helper ==========
+
 std::future<void> copyFileAsync(const fs::path& src, const fs::path& dst, bool dryRun, bool verbose, bool enableColors) {
     if (dryRun) {
         if (fs::exists(dst)) {
@@ -286,7 +328,10 @@ std::future<void> copyFileAsync(const fs::path& src, const fs::path& dst, bool d
         fs::create_directories(dst.parent_path());
     }
 
+    // Wrap the actual copy in a lambda that acquires/releases the semaphore
     return std::async(std::launch::async, [=]() {
+        // Acquire permission to run (blocks until a slot available).
+        if (g_copy_sem) g_copy_sem->acquire();
         try {
             if (fs::exists(dst)) {
                 fs::remove(dst);
@@ -295,10 +340,15 @@ std::future<void> copyFileAsync(const fs::path& src, const fs::path& dst, bool d
             logMsg("Copied " + src.string() + " -> " + dst.string(), true, enableColors);
         } catch (const std::exception& ex) {
             logMsg(std::string("[X] ERROR copying file: ") + ex.what() + " [" + src.string() + "] [" + dst.string() + "]", true, enableColors);
+            // release semaphore before rethrowing
+            if (g_copy_sem) g_copy_sem->release();
             throw;
         }
+        // normal release
+        if (g_copy_sem) g_copy_sem->release();
     });
 }
+
 
 // ========== Normalization utilities ==========
 static std::string normalize_generic(const fs::path& p) {
@@ -689,6 +739,56 @@ void addToPath(const fs::path& exePath, bool verbose, bool enableColors) {
 }
 #endif
 
+#ifdef _WIN32
+#include <processthreadsapi.h>
+static void try_set_process_priority_ultra() {
+    if (!SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS)) {
+        logMsg(std::string("[WARN] could not set HIGH_PRIORITY_CLASS (ultra)."), true, true);
+    } else {
+        logMsg(std::string("[INFO] process priority set to HIGH (ultra)."), true, true);
+    }
+    // also bump current thread priority
+    if (!SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST)) {
+        logMsg(std::string("[WARN] could not set THREAD_PRIORITY_HIGHEST."), true, true);
+    }
+}
+static void try_set_process_priority_minimum() {
+    if (!SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS)) {
+        logMsg(std::string("[WARN] could not set IDLE_PRIORITY_CLASS (minimum)."), true, true);
+    } else {
+        logMsg(std::string("[INFO] process priority set to IDLE (minimum)."), true, true);
+    }
+    if (!SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_LOWEST)) {
+        logMsg(std::string("[WARN] could not set THREAD_PRIORITY_LOWEST."), true, true);
+    }
+}
+#else
+// POSIX
+#include <sys/resource.h>
+#include <unistd.h>
+static void try_set_process_priority_ultra() {
+    // try to decrease nice (increase priority). negative nice values require privileges.
+    errno = 0;
+    int target_nice = -5; // modest boost
+    int ret = setpriority(PRIO_PROCESS, 0, target_nice);
+    if (ret != 0) {
+        logMsg(std::string("[WARN] unable to set higher priority (setpriority) - errno=") + std::to_string(errno), true, true);
+    } else {
+        logMsg(std::string("[INFO] process nice set to ") + std::to_string(target_nice) + " (ultra).", true, true);
+    }
+}
+static void try_set_process_priority_minimum() {
+    errno = 0;
+    int target_nice = 10; // lower CPU priority
+    int ret = setpriority(PRIO_PROCESS, 0, target_nice);
+    if (ret != 0) {
+        logMsg(std::string("[WARN] unable to set lower priority (setpriority) - errno=") + std::to_string(errno), true, true);
+    } else {
+        logMsg(std::string("[INFO] process nice set to ") + std::to_string(target_nice) + " (minimum).", true, true);
+    }
+}
+#endif
+
 // ========== Help ==========
 void printHelp(const std::string& exeName) {
     std::cout << "Usage:\n"
@@ -707,10 +807,44 @@ void printHelp(const std::string& exeName) {
               << "  --sha256            Use SHA-256 (Windows CNG) for fingerprints\n"
               << "  --sha256-min <N>    Minimum file size to use SHA (e.g. 1M, 500K)\n"
               << "  --sha256-max <N>    Maximum file size to use SHA (e.g. 500M, 2G)\n"
+              << "  --ultra-speed       Boost priority and concurrency for faster syncs\n"
+              << "  --minimum-speed     Lower priority and concurrency to save resources\n"
 #ifdef _WIN32
               << "  --add-to-path       [Windows] add tool to user PATH\n"
 #endif
               << "  -h, --help          Show help\n";
+}
+
+static void apply_speed_policy_and_init_concurrency(bool verbose, bool enableColors) {
+    unsigned int hc = std::thread::hardware_concurrency();
+    if (hc == 0) hc = 2;
+
+    // default concurrency: max(2, hw_concurrency)
+    int default_conc = std::max(2u, hc);
+    int ultra_conc = std::max(4u, hc * 2);
+    int minimum_conc = 1;
+
+    if (g_ultra_speed && g_minimum_speed) {
+        logMsg("[WARN] both --ultra-speed and --minimum-speed set; proceeding with --ultra-speed.", true, enableColors);
+        g_minimum_speed = false;
+    }
+
+    if (g_ultra_speed) {
+        try_set_process_priority_ultra();
+        g_max_concurrent_copies = ultra_conc;
+        logMsg(std::string("[INFO] Ultra-speed enabled: concurrency=") + std::to_string(g_max_concurrent_copies), true, enableColors);
+    } else if (g_minimum_speed) {
+        try_set_process_priority_minimum();
+        g_max_concurrent_copies = minimum_conc;
+        logMsg(std::string("[INFO] Minimum-speed enabled: concurrency=") + std::to_string(g_max_concurrent_copies), true, enableColors);
+    } else {
+        // normal
+        g_max_concurrent_copies = default_conc;
+        logMsg(std::string("[INFO] Normal speed: concurrency=") + std::to_string(g_max_concurrent_copies), true, enableColors);
+    }
+
+    // init semaphore with concurrency count
+    g_copy_sem = std::make_shared<SimpleSemaphore>(g_max_concurrent_copies);
 }
 
 // ========== Main ==========
@@ -718,7 +852,7 @@ int main(int argc, char* argv[]) {
 #ifdef _WIN32
     enableVirtualTerminalProcessing();
 #endif
-    std::cout << PURPLE << "\n--- RUNNING VERSION 1.2 ---\n" << RESET << std::endl;
+    std::cout << PURPLE << "\n--- RUNNING VERSION 1.3 ---\n" << RESET << std::endl;
 
     if (argc < 2) {
         auto loadedSettings = loadSettings();
@@ -751,6 +885,8 @@ int main(int argc, char* argv[]) {
             g_sha256_max_bytes = parse_size_arg(argv[++i], g_sha256_max_bytes);
             g_sha256_max_set = true;
         }
+        else if (arg=="--ultra-speed") g_ultra_speed = true;
+        else if (arg=="--minimum-speed") g_minimum_speed = true;
         else if (arg=="-h" || arg=="--help") { printHelp(fs::path(argv[0]).filename().string()); return 0; }
 #ifdef _WIN32
         else if (arg=="--add-to-path") { addToPath(fs::absolute(fs::path(argv[0])), true, enableColors); return 0; }
@@ -778,6 +914,7 @@ int main(int argc, char* argv[]) {
     }
 
     g_use_sha256 = useSha256;
+    apply_speed_policy_and_init_concurrency(verbose, enableColors);
     auto start = std::chrono::high_resolution_clock::now();
 
     if (mode=="dir") syncDir(src,dst,ignorePaths,dryRun,verbose,mirror,enableColors);
