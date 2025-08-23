@@ -246,7 +246,7 @@ Mirror mode (`--delete`) will remove files and directories from the destination 
 
 * **v1.0** — Initial public release: directory & file sync, FNV64 fingerprints, dry-run, mirror, ignore, colored output, Windows SHA-256 support.
 * **v1.1** — Fix: file size check duplication bug; added `<cstdint>` include; improved registry PATH handling; recommendations for concurrency throttling.
-* * **v1.2** — New: Added `--sha256-min` and `--sha256-max` for size-based conditional SHA-256 fingerprinting. Changed default `--sha256` behavior to apply to all files unless limits are specified.
+* **v1.2** — New: Added `--sha256-min` and `--sha256-max` for size-based conditional SHA-256 fingerprinting. Changed default `--sha256` behavior to apply to all files unless limits are specified.
 * **v1.3** — New: Added performance control modes (`--ultra-speed`, `--minimum-speed`) to manage process priority and concurrency. Implemented a semaphore for copy task throttling.
 
 ---
