@@ -39,7 +39,7 @@ SyncEveryThing is built for anyone who needs fast, powerful, and reliable contro
 * **The Annoyance:** Are you tired of slow, clunky GUI applications for managing backups? Do you need a lightweight, scriptable tool that integrates perfectly into your automated workflows on a server or home lab?
 * **The Solution:** SyncEveryThing is a command-line-first tool built for performance and control. Use performance flags like **`--minimum-speed`** to run large backup jobs in the background without impacting system performance. Automate everything with scripts, save detailed logs with **`--save-log`**, and enjoy a tool that does exactly what you tell it to, and nothing more.
 
-#### ➤ For Content Creators & Data Hoarders: The Speed Demon
+#### ➤ For Content Creators & Data Hoarders: The Performance Powerhouse
 
 * **The Bottleneck:** Do you manage massive collections of videos, RAW photos, or other large media files? Is waiting for slow cloud uploads or inefficient copy-paste operations wasting your valuable time?
 * **The Solution:** SyncEveryThing is designed for speed. Its multi-threaded architecture, controlled by a semaphore, makes copying thousands of files a breeze. Its smart fingerprinting and rename detection heuristics mean that if you move or rename a 100 GB folder, the sync completes in seconds, not hours, because it moves the data locally instead of re-copying it.
