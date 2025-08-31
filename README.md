@@ -46,18 +46,6 @@ SyncEveryThing is built for anyone who needs fast, powerful, and reliable contro
 
 ---
 
-## Repository layout
-
-```
-/ (repo root)
-  ├─ sync.cpp             # single-source-file implementation
-  ├─ README.md            # this file
-  ├─ LICENSE              # recommended: MIT
-  └─ .github/workflows    # optional CI GitHub Actions
-```
-
----
-
 ## Building
 
 **Requirements**
